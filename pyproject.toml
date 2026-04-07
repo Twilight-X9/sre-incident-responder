@@ -3,18 +3,21 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "your-environment-name"
+name = "sre-incident-responder"
 requires-python = ">=3.10"
-version = "0.1.0"
-description = "A real-world OpenEnv environment for RL"
+version = "1.0.0"
+description = "SRE Incident Responder environment for OpenEnv"
 dependencies = [
-    "openenv",
-    "numpy",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "httpx",
     "openai",
-    "pydantic"
+    "openenv-core"
 ]
 
 [tool.setuptools]
-packages = ["."]
+packages = ["sre_env", "server"]
+
 [project.scripts]
 server = "server.app:main"
