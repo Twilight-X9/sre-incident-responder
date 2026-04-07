@@ -16,3 +16,5 @@ dependencies = [
 
 [tool.setuptools]
 packages = ["."]
+[project.scripts]
+server = "server.app:main"
