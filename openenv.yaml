@@ -1,0 +1,12 @@
+spec_version: "1.0"
+name: "sre_incident_responder"
+version: "1.0.0"
+description: "A stateful DevOps environment where an AI acts as a Site Reliability Engineer (SRE). The agent must actively query logs, monitor metrics, and execute terminal commands to mitigate live server incidents."
+tags:["devops", "agentic", "tool-use", "reasoning", "infrastructure"]
+tasks:
+  - id: easy
+    description: "Mitigate a basic Out-of-Memory (OOM) crash on the frontend tier."
+  - id: medium
+    description: "Investigate and rollback a faulty deployment causing HTTP 500s on the auth service."
+  - id: hard
+    description: "Diagnose a silent cascading failure where a locked DB query takes down the API gateway."
