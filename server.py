@@ -119,3 +119,6 @@ def get_state():
         "score": current_state.score, 
         "done": current_state.done
     }
+@app.get("/")
+def health_check():
+    return {"status": "SRE Environment is Live"}
