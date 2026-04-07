@@ -122,3 +122,13 @@ def get_state():
 @app.get("/")
 def health_check():
     return {"status": "SRE Environment is Live"}
+import uvicorn
+
+# ... (keep your existing FastAPI app and routes here)
+
+def main():
+    """Main entry point for multi-mode deployment."""
+    uvicorn.run(app, host="0.0.0.0", port=7860)
+
+if __name__ == "__main__":
+    main()
