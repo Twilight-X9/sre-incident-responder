@@ -1,45 +1,40 @@
 import logging
-import uvicorn
 from fastapi import FastAPI, Body
 from pydantic import BaseModel
 from sre_env.models import SREAction, SREObservation
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("sre_env")
-
 app = FastAPI(title="SRE Incident Responder")
+
+@app.get("/")
+def health_check():
+    return {"status": "ok", "message": "SRE Environment is running."}
+# ---------------------------------------------------
 
 class EnvState:
     def __init__(self, task="easy"):
-        self.task = task
-        self.tick = 0
-        self.score = 0.01
-        self.done = False
+        self.task, self.tick, self.score, self.done = task, 0, 0.0, False
         self.last_output = "System booted. Awaiting command."
         
-        # Scenario definitions
         if task == "easy":
-            self.alerts = ["CRITICAL [frontend_service]: memory usage at 99%"]
-            self.problem_service = "frontend_service"
-            self.solution = "RESTART_SERVICE"
-            self.logs = {"frontend_service": "java.lang.OutOfMemoryError: Java heap space", "db": "DB Status: OK"}
+            self.alerts = ["CRITICAL [frontend]: memory 99%"]
+            self.problem_service, self.solution = "frontend", "RESTART_SERVICE"
+            self.logs = {"frontend": "OutOfMemoryError", "db": "OK"}
         elif task == "medium":
-            self.alerts = ["HIGH [auth_service]: HTTP 500 error spike detected"]
-            self.problem_service = "auth_service"
-            self.solution = "ROLLBACK_DEPLOYMENT"
-            self.logs = {"auth_service": "Traceback: SyntaxError in auth_controller.py v2.1", "db": "DB Status: OK"}
-        else: # hard task
-            self.alerts = ["CRITICAL [api_gateway]: timeout", "WARNING [db]: connection pool exhausted"]
-            self.problem_service = "db"
-            self.solution = "KILL_DB_QUERY"
-            self.logs = {"api_gateway": "Error: Timed out waiting for DB connection pool", "db": "LOCK WAIT TIMEOUT EXCEEDED"}
+            self.alerts = ["HIGH [auth]: HTTP 500"]
+            self.problem_service, self.solution = "auth", "ROLLBACK_DEPLOYMENT"
+            self.logs = {"auth": "SyntaxError in auth.py", "db": "OK"}
+        else:
+            self.alerts = ["CRITICAL [api]: timeout", "WARNING [db]: pool exhausted"]
+            self.problem_service, self.solution = "db", "KILL_DB_QUERY"
+            self.logs = {"api": "Timeout", "db": "LOCK WAIT TIMEOUT"}
 
 current_state = EnvState()
 
-class ResetRequest(BaseModel):
+class ResetRequest(BaseModel): 
     task: str = "easy"
 
-def _build_obs() -> SREObservation:
+def _obs() -> SREObservation:
     return SREObservation(
         tick=current_state.tick, 
         active_alerts=current_state.alerts, 
@@ -50,63 +45,43 @@ def _build_obs() -> SREObservation:
 @app.post("/reset")
 def reset_env(req: ResetRequest = Body(default_factory=ResetRequest)):
     global current_state
-    logger.info(f"Resetting environment with task: {req.task}")
     current_state = EnvState(task=req.task)
-    return {"observation": _build_obs().model_dump()}
+    return {"observation": _obs().model_dump()}
 
 @app.post("/step")
 def step_env(action: SREAction):
     global current_state
-    
-    if current_state.done:
-        return {"observation": _build_obs().model_dump(), "reward": 0.0, "done": True, "info": {"score": current_state.score, "error": "Episode finished"}}
+    if current_state.done: 
+        return {"observation": _obs().model_dump(), "reward": 0.0, "done": True, "info": {}}
 
     current_state.tick += 1
     reward = 0.0
     
-    # Evaluate the agent's action
     if action.target_service == current_state.problem_service:
         if action.action_type in ["CHECK_METRICS", "TAIL_LOGS"]:
-            current_state.last_output = current_state.logs.get(action.target_service, "No logs found.")
+            current_state.last_output = current_state.logs.get(action.target_service, "No logs.")
             reward = 0.2  
         elif action.action_type == current_state.solution:
-            current_state.last_output = f"SUCCESS: {action.action_type} executed. Incident resolved."
-            current_state.alerts = []
-            current_state.done = True
-            reward = 0.78
+            current_state.last_output = f"SUCCESS: {action.action_type} executed."
+            current_state.alerts, current_state.done, reward = [], True, 0.8  
         else:
-            current_state.last_output = "Command executed, but the service is still failing."
+            current_state.last_output = "Failed."
             reward = -0.1 
     else:
-        current_state.last_output = f"Executed on {action.target_service}. Service was healthy. You wasted time."
+        current_state.last_output = "Wasted time on healthy service."
         reward = -0.2
 
-    # Updating the cumulative score and strictly clamp between 0.01 and 0.99
-    current_state.score += reward
-    current_state.score = max(0.01, min(current_state.score, 0.99))
-
-    # Auto-fail if they take too many turns
+    current_state.score = max(0.0, min(current_state.score + reward, 1.0))
     if current_state.tick >= 6 and not current_state.done:
-        current_state.done = True
-        current_state.last_output = "SLA breached! Escalated to a human engineer."
+        current_state.done, current_state.last_output = True, "SLA breached!"
 
     return {
-        "observation": _build_obs().model_dump(), 
+        "observation": _obs().model_dump(), 
         "reward": reward, 
         "done": current_state.done, 
         "info": {"score": current_state.score}
     }
 
 @app.get("/state")
-def get_state():
-    return {
-        "task": current_state.task, "tick": current_state.tick, 
-        "score": current_state.score, "done": current_state.done
-    }
-
-def main():
-    """Main entry point for multi-mode deployment."""
-    uvicorn.run(app, host="0.0.0.0", port=7860)
-
-if __name__ == "__main__":
-    main()
+def get_state(): 
+    return {"task": current_state.task, "tick": current_state.tick, "score": current_state.score, "done": current_state.done}
