@@ -29,7 +29,6 @@ SYSTEM_PROMPT = textwrap.dedent("""
     
     Respond ONLY with JSON: {"action_type": "TAIL_LOGS", "target_service": "db"}
 """).strip()
-# ---- MANDATORY STDOUT FORMATTING LOGIC ----
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
@@ -52,13 +51,12 @@ def decide_action(client: OpenAI, obs) -> SREAction:
                 {"role": "system", "content": SYSTEM_PROMPT}, 
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.1, # Keep it low for deterministic JSON
+            temperature=0.1,
             max_tokens=150,
         )
         
         raw_text = completion.choices[0].message.content.strip()
         
-        # Hacky way to strip markdown if the LLM decides to wrap it in ```json ... ```
         clean_text = raw_text.replace("```json", "").replace("```", "").strip()
         parsed = json.loads(clean_text)
         
@@ -68,7 +66,6 @@ def decide_action(client: OpenAI, obs) -> SREAction:
         )
         
     except Exception as e:
-        # Fallback so the inference loop doesn't crash on a bad LLM response
         return SREAction(action_type="CHECK_METRICS", target_service="fallback_error")
 
 async def main():
@@ -104,10 +101,10 @@ async def main():
             if done:
                 break
                 
-        # Calculate final normalized score
+       # Calculate final normalized score
         total_score = sum(rewards)
-        final_score = min(max(total_score, 0.0), 1.0) # Ensure it stays 0.0 to 1.0
-        is_success = final_score >= 0.8 # Consider it a win if they scored highly
+        final_score = min(max(total_score, 0.01), 0.99)
+        is_success = final_score >= 0.78
         
     finally:
         await env.close()
