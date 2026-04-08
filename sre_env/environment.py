@@ -14,18 +14,12 @@ class ResetResult(BaseModel):
     observation: SREObservation
 
 class SREEnv:
-    """Client SDK to interact with the SRE simulation server."""
-    
     def __init__(self, base_url: str):
-        self.base_url = base_url
-        # Give it a healthy timeout since LLMs can take a bit
-        self.client = httpx.AsyncClient(base_url=self.base_url, timeout=45.0)
+        self.client = httpx.AsyncClient(base_url=base_url, timeout=45.0)
 
     @classmethod
     async def from_docker_image(cls, image_name: Optional[str] = None):
-        # Defaulting to localhost:7860 to match HF Spaces exposed port
-        url = os.getenv("ENV_BASE_URL", "http://localhost:7860")
-        return cls(base_url=url)
+        return cls(base_url=os.getenv("ENV_BASE_URL", "http://localhost:7860"))
 
     async def reset(self, task: str = "easy") -> ResetResult:
         resp = await self.client.post("/reset", json={"task": task})
