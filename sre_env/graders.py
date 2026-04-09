@@ -23,3 +23,10 @@ def grade_medium(*args: Any, **kwargs: Any) -> float:
 
 def grade_hard(*args: Any, **kwargs: Any) -> float: 
     return _evaluate_state(*args, **kwargs)
+
+def grade(self, *args, **kwargs):
+    raw_score = calculate_score() 
+    
+    final_score = max(0.01, min(0.99, raw_score))
+    return final_score
+
