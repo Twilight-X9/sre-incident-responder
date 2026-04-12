@@ -1,4 +1,5 @@
 import logging
+import uvicorn
 from fastapi import FastAPI, Body
 from pydantic import BaseModel
 from sre_env.models import SREAction, SREObservation
@@ -83,5 +84,11 @@ def step_env(action: SREAction):
     }
 
 @app.get("/state")
-def get_state(): 
+def get_state():
     return {"task": current_state.task, "tick": current_state.tick, "score": current_state.score, "done": current_state.done}
+
+def main():
+    uvicorn.run(app, host="0.0.0.0", port=7860)
+
+if __name__ == "__main__":
+    main()
