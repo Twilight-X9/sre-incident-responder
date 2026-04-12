@@ -2,26 +2,43 @@ import asyncio
 import os
 import json
 import textwrap
+import logging
 from typing import List, Optional
 from openai import OpenAI
 from sre_env.models import SREAction
 from sre_env.environment import SREEnv
+import config
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-BENCHMARK = "sre_incident_responder"
-MAX_STEPS = 6
+MODEL_NAME = config.MODEL_NAME
+BENCHMARK = "sre_incident-responder"
+MAX_STEPS = config.MAX_STEPS
 
 SYSTEM_PROMPT = textwrap.dedent("""
-You are an expert SRE.
-STRATEGY:
-1. Look at ALL alerts. If one service is a gateway and another is a DB, the DB is usually the root cause.
-2. If 'last_command_output' says a service is healthy or an action wasted time, DO NOT repeat that action.
-3. You must investigate the 'db' service if alerts mention connection pools or locks.
-Allowed action_types: CHECK_METRICS, TAIL_LOGS, RESTART_SERVICE, ROLLBACK_DEPLOYMENT, KILL_DB_QUERY
-Respond ONLY with JSON: {"action_type": "TAIL_LOGS", "target_service": "db"}
-""").strip()
+    You are an expert Site Reliability Engineer (SRE). Your goal is to diagnose and resolve system incidents in the minimum number of steps.
+
+    DIAGNOSTIC WORKFLOW:
+    1. ANALYZE: Look at the active alerts. Identify which service is reporting errors.
+    2. EVALUATE: Read the 'last_command_output'. Did the previous action provide a clue or a failure?
+    3. HYPOTHESIZE: If the frontend is slow but the DB has locks, the DB is likely the root cause.
+    4. ACT: Choose the most logical next step. Use CHECK_METRICS or TAIL_LOGS to confirm a hypothesis, and use fix actions (RESTART_SERVICE, ROLLBACK_DEPLOYMENT, KILL_DB_QUERY) only when you are certain.
+
+    Allowed action_types: CHECK_METRICS, TAIL_LOGS, RESTART_SERVICE, ROLLBACK_DEPLOYMENT, KILL_DB_QUERY
+
+    RESPONSE FORMAT:
+    You must respond ONLY with a JSON object containing 'reasoning' (your step-by-step thought process) and the action details.
+    Example:
+    {
+        "reasoning": "The frontend is reporting 99% memory. I will first check the logs to see if it is a memory leak or a specific crash.",
+        "action_type": "TAIL_LOGS",
+        "target_service": "frontend"
+    }
+    """).strip()
 
 
 def log_start(task: str, env: str, model: str) -> None:
@@ -44,8 +61,8 @@ def decide_action(client: OpenAI, obs) -> SREAction:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.1,
-            max_tokens=150,
+            temperature=config.TEMPERATURE,
+            max_tokens=config.MAX_TOKENS,
         )
         raw_text = completion.choices[0].message.content.strip()
         clean_text = raw_text.replace("```json", "").replace("```", "").strip()

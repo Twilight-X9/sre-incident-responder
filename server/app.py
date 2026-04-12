@@ -3,6 +3,7 @@ import uvicorn
 from fastapi import FastAPI, Body
 from pydantic import BaseModel
 from sre_env.models import SREAction, SREObservation
+from config import SERVER_HOST, SERVER_PORT, SLA_TICK_LIMIT, DEFAULT_SCORE_MIN, DEFAULT_SCORE_MAX
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="SRE Incident Responder")
@@ -14,21 +15,31 @@ def health_check():
 
 class EnvState:
     def __init__(self, task="easy"):
-        self.task, self.tick, self.score, self.done = task, 0, 0.01, False
+        self.task, self.tick, self.score, self.done = task, 0, DEFAULT_SCORE_MIN, False
         self.last_output = "System booted. Awaiting command."
         
         if task == "easy":
             self.alerts = ["CRITICAL [frontend]: memory 99%"]
             self.problem_service, self.solution = "frontend", "RESTART_SERVICE"
-            self.logs = {"frontend": "OutOfMemoryError", "db": "OK"}
+            self.logs = {
+                "frontend": "2026-04-12 10:00:01 ERROR [main] - java.lang.OutOfMemoryError: Java heap space\n  at com.app.Frontend.process(Frontend.java:42)",
+                "db": "2026-04-12 10:00:01 INFO [main] - Database health check: OK"
+            }
         elif task == "medium":
-            self.alerts = ["HIGH [auth]: HTTP 500"]
+            self.alerts = ["HIGH [auth]: HTTP 500 Internal Server Error"]
             self.problem_service, self.solution = "auth", "ROLLBACK_DEPLOYMENT"
-            self.logs = {"auth": "SyntaxError in auth.py", "db": "OK"}
+            self.logs = {
+                "auth": "2026-04-12 10:05:22 CRITICAL [auth.py] - SyntaxError: invalid syntax at line 114 in auth_middleware.py",
+                "db": "2026-04-12 10:05:22 INFO [main] - Database health check: OK"
+            }
         else:
-            self.alerts = ["CRITICAL [api]: timeout", "WARNING [db]: pool exhausted"]
+            # Hard mode: Cascading failure. API is failing because DB is locked.
+            self.alerts = ["CRITICAL [api]: Gateway Timeout", "WARNING [db]: connection_pool_exhausted"]
             self.problem_service, self.solution = "db", "KILL_DB_QUERY"
-            self.logs = {"api": "Timeout", "db": "LOCK WAIT TIMEOUT"}
+            self.logs = {
+                "api": "2026-04-12 10:10:05 ERROR [api] - Upstream timeout waiting for database response (5000ms)\n  at api.request_handler.py:88",
+                "db": "2026-04-12 10:10:01 WARN [db_engine] - Long running query detected: SELECT * FROM large_table WHERE status='pending' (PID: 8821) LOCK WAIT TIMEOUT"
+            }
 
 current_state = EnvState()
 
@@ -72,8 +83,8 @@ def step_env(action: SREAction):
         current_state.last_output = "Wasted time on healthy service."
         reward = -0.2
 
-    current_state.score = max(0.01, min(current_state.score + reward, 0.99))
-    if current_state.tick >= 6 and not current_state.done:
+    current_state.score = max(DEFAULT_SCORE_MIN, min(current_state.score + reward, DEFAULT_SCORE_MAX))
+    if current_state.tick >= SLA_TICK_LIMIT and not current_state.done:
         current_state.done, current_state.last_output = True, "SLA breached!"
 
     return {
@@ -88,7 +99,7 @@ def get_state():
     return {"task": current_state.task, "tick": current_state.tick, "score": current_state.score, "done": current_state.done}
 
 def main():
-    uvicorn.run(app, host="0.0.0.0", port=7860)
+    uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)
 
 if __name__ == "__main__":
     main()
