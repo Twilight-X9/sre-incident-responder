@@ -13,7 +13,7 @@ def health_check():
 
 class EnvState:
     def __init__(self, task="easy"):
-        self.task, self.tick, self.score, self.done = task, 0, 0.0, False
+        self.task, self.tick, self.score, self.done = task, 0, 0.01, False
         self.last_output = "System booted. Awaiting command."
         
         if task == "easy":
@@ -52,10 +52,10 @@ def reset_env(req: ResetRequest = Body(default_factory=ResetRequest)):
 def step_env(action: SREAction):
     global current_state
     if current_state.done: 
-        return {"observation": _obs().model_dump(), "reward": 0.0, "done": True, "info": {}}
+        return {"observation": _obs().model_dump(), "reward": 0.01, "done": True, "info": {}}
 
     current_state.tick += 1
-    reward = 0.0
+    reward = 0.01
     
     if action.target_service == current_state.problem_service:
         if action.action_type in ["CHECK_METRICS", "TAIL_LOGS"]:
@@ -71,7 +71,7 @@ def step_env(action: SREAction):
         current_state.last_output = "Wasted time on healthy service."
         reward = -0.2
 
-    current_state.score = max(0.0, min(current_state.score + reward, 1.0))
+    current_state.score = max(0.01, min(current_state.score + reward, 0.99))
     if current_state.tick >= 6 and not current_state.done:
         current_state.done, current_state.last_output = True, "SLA breached!"
 

@@ -72,7 +72,7 @@ async def main():
         steps = 0
         done = False
         success = False
-        final_score = 0.0
+        final_score = 0.01
         
         while not done and steps < MAX_STEPS:
             steps += 1
@@ -86,7 +86,7 @@ async def main():
             action_str = f"{action.action_type}({action.target_service})"
             log_step(step=steps, action=action_str, reward=reward, done=done, error=None)
             
-            final_score = step_res.info.get("score", 0.0)
+            final_score = step_res.info.get("score", 0.01)
             if done and final_score > 0.5:
                 success = True
                 
